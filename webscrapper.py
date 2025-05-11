@@ -24,14 +24,13 @@ def generate_pdf(data, query):
         elements.append(Paragraph(f"Tienda: {item['Tienda']}", styles['Normal']))
         elements.append(Paragraph(f"Fecha: {item['Fecha']}", styles['Normal']))
         elements.append(Paragraph(f"URL Producto: {item['URL Producto']}", styles['Normal']))
-        
-        # Descargar la imagen y agregarla
+
         if item.get("URL Imagen"):
             try:
                 response = requests.get(item["URL Imagen"], stream=True, timeout=5)
                 if response.status_code == 200:
                     image_bytes = io.BytesIO(response.content)
-                    img = RLImage(image_bytes, width=100, height=100)  # ajusta tamaño si quieres
+                    img = RLImage(image_bytes, width=100, height=100)
                     elements.append(img)
             except Exception as e:
                 elements.append(Paragraph(f"[No se pudo cargar la imagen: {e}]", styles['Normal']))
@@ -41,7 +40,6 @@ def generate_pdf(data, query):
     doc.build(elements)
     buffer.seek(0)
     return buffer
-
 
 st.set_page_config(
     page_title="DealMiner",
@@ -107,7 +105,6 @@ def buscar_en_mercado_libre(producto: str, limite=10):
     sopa = BeautifulSoup(respuesta.text, "html.parser")
 
     items = sopa.find_all("li", class_="ui-search-layout__item")
-
     resultados = []
 
     for item in items[:limite]:
@@ -185,23 +182,23 @@ if search_query and tiendas:
     if resultados:
         resultados_ordenados = sorted(resultados, key=lambda x: x["Precio"])
         for item in resultados_ordenados:
-            st.markdown("----")
+            st.markdown("---")
+            cols = st.columns([1, 3])
 
-        if item["URL Imagen"]:
-            st.image(item["URL Imagen"], use_column_width=True)
+            with cols[0]:
+                if item["URL Imagen"]:
+                    st.image(item["URL Imagen"], use_container_width=True)
 
-        st.markdown(f"**[{item['Título']}]({item['URL Producto']})**")
-
-        with st.expander("📋 Ver detalles"):
-            st.markdown(f"💲 **Precio:** ${item['Precio']:.2f}")
-            st.markdown(f"🏬 **Tienda:** {item['Tienda']}")
-            st.markdown(f"📅 **Fecha:** {item['Fecha']}")
-
+            with cols[1]:
+                st.markdown(f"**[{item['Título']}]({item['URL Producto']})**")
+                st.markdown(f"💲 **Precio:** ${item['Precio']:.2f}")
+                st.markdown(f"🏬 **Tienda:** {item['Tienda']}")
+                st.markdown(f"📅 **Fecha:** {item['Fecha']}")
 
         file_name = save_to_excel(resultados_ordenados, search_query)
         with open(file_name, "rb") as f:
             st.download_button(
-                label="📥 Descargar Excel con todos los productos",
+                label="📅 Descargar Excel con todos los productos",
                 data=f,
                 file_name=file_name,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
