@@ -9,7 +9,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 import io
 
-# -------------------- PDF GENERATOR --------------------
 def generate_pdf(data, query):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
@@ -42,44 +41,17 @@ def generate_pdf(data, query):
     buffer.seek(0)
     return buffer
 
-# -------------------- STREAMLIT SETUP --------------------
-st.set_page_config(page_title="DealMiner", page_icon="🛒")
+st.set_page_config(
+    page_title="DealMiner",
+    page_icon="🛒"
+)
 
-# Script para detectar ancho de pantalla
-st.markdown("""
-    <script>
-        const sendWidth = () => {
-            const width = window.innerWidth;
-            window.parent.postMessage({streamlitWidth: width}, "*");
-        };
-        window.addEventListener("resize", sendWidth);
-        sendWidth();
-    </script>
-""", unsafe_allow_html=True)
-
-if 'device_width' not in st.session_state:
-    st.session_state.device_width = 1000
-
-st.components.v1.html("""
-    <script>
-        window.addEventListener("message", (event) => {
-            if (event.data.streamlitWidth) {
-                const streamlitWidth = event.data.streamlitWidth;
-                const streamlitFrame = window.frameElement;
-                streamlitFrame.contentWindow.postMessage(
-                    { type: "streamlit:setComponentValue", value: streamlitWidth },
-                    "*"
-                );
-            }
-        });
-    </script>
-""", height=0)
-
-device_width = st.number_input("Device width", min_value=0, step=1, value=st.session_state.device_width, key="device_width", label_visibility="collapsed")
-
-# -------------------- DATA SCRAPING FUNCTIONS --------------------
 def get_product_info_amazon(url):
-    headers = {'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, features='lxml')
 
@@ -102,11 +74,18 @@ def get_product_info_amazon(url):
     return title, image_url, price
 
 def get_search_results_amazon(query):
-    headers = {'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+
     url = f"https://www.amazon.com/s?k={query.replace(' ', '+')}"
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, features='lxml')
-    product_links = ["https://www.amazon.com" + link['href'] for link in soup.find_all('a', {'class': 'a-link-normal s-no-outline'}, href=True)]
+
+    product_links = []
+    for link in soup.find_all('a', {'class': 'a-link-normal s-no-outline'}, href=True):
+        product_links.append("https://www.amazon.com" + link['href'])
     return product_links
 
 def obtener_titulo_desde_pagina(url, headers):
@@ -121,12 +100,13 @@ def obtener_titulo_desde_pagina(url, headers):
 def buscar_en_mercado_libre(producto: str, limite=10):
     query = producto.replace(" ", "+")
     url = f"https://listado.mercadolibre.com.mx/{query}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     respuesta = requests.get(url, headers=headers)
     sopa = BeautifulSoup(respuesta.text, "html.parser")
-    items = sopa.find_all("li", class_="ui-search-layout__item")
 
+    items = sopa.find_all("li", class_="ui-search-layout__item")
     resultados = []
+
     for item in items[:limite]:
         try:
             enlace_tag = item.find("a", href=True)
@@ -135,6 +115,7 @@ def buscar_en_mercado_libre(producto: str, limite=10):
                 continue
 
             titulo = obtener_titulo_desde_pagina(enlace, headers)
+
             precio_entero = item.find("span", class_="andes-money-amount__fraction")
             precio_decimal = item.find("span", class_="andes-money-amount__cents")
             if not precio_entero:
@@ -144,7 +125,13 @@ def buscar_en_mercado_libre(producto: str, limite=10):
             precio_completo = f"{precio}.{precio_decimal.text if precio_decimal else '00'}"
 
             imagen_tag = item.find("img")
-            imagen = imagen_tag.get("data-src") or imagen_tag.get("data-srcset") or imagen_tag.get("src") if imagen_tag else None
+            imagen = None
+            if imagen_tag:
+                imagen = (
+                    imagen_tag.get("data-src") or
+                    imagen_tag.get("data-srcset") or
+                    imagen_tag.get("src")
+                )
 
             resultados.append({
                 "Fecha": datetime.now().strftime('%Y-%m-%d'),
@@ -166,8 +153,8 @@ def save_to_excel(data, query):
     df.to_excel(nombre_archivo, index=False)
     return nombre_archivo
 
-# -------------------- MAIN UI --------------------
 st.title("🛒 Comparador de precios: Amazon + Mercado Libre")
+
 search_query = st.text_input("Introduce tu búsqueda:")
 tiendas = st.multiselect("Selecciona las tiendas que quieres comparar:", ["Amazon", "Mercado Libre"], default=["Amazon", "Mercado Libre"])
 
@@ -196,26 +183,17 @@ if search_query and tiendas:
         resultados_ordenados = sorted(resultados, key=lambda x: x["Precio"])
         for item in resultados_ordenados:
             st.markdown("---")
+            cols = st.columns([1, 3])
 
-            if device_width < 768:
+            with cols[0]:
                 if item["URL Imagen"]:
-                    st.image(item["URL Imagen"], width=150)
+                    st.image(item["URL Imagen"], use_container_width=True)
+
+            with cols[1]:
                 st.markdown(f"**[{item['Título']}]({item['URL Producto']})**")
-                with st.expander("📋 Ver detalles"):
-                    st.markdown(f"💲 **Precio:** ${item['Precio']:.2f}")
-                    st.markdown(f"🏬 **Tienda:** {item['Tienda']}")
-                    st.markdown(f"📅 **Fecha:** {item['Fecha']}")
-            else:
-                cols = st.columns([1, 3])
-                with cols[0]:
-                    if item["URL Imagen"]:
-                        st.image(item["URL Imagen"], width=120)
-                with cols[1]:
-                    st.markdown(f"**[{item['Título']}]({item['URL Producto']})**")
-                    with st.expander("📋 Ver detalles"):
-                        st.markdown(f"💲 **Precio:** ${item['Precio']:.2f}")
-                        st.markdown(f"🏬 **Tienda:** {item['Tienda']}")
-                        st.markdown(f"📅 **Fecha:** {item['Fecha']}")
+                st.markdown(f"💲 **Precio:** ${item['Precio']:.2f}")
+                st.markdown(f"🏬 **Tienda:** {item['Tienda']}")
+                st.markdown(f"📅 **Fecha:** {item['Fecha']}")
 
         file_name = save_to_excel(resultados_ordenados, search_query)
         with open(file_name, "rb") as f:
@@ -235,5 +213,6 @@ if search_query and tiendas:
         )
     else:
         st.warning("No se encontraron resultados para tu búsqueda.")
+
 elif search_query and not tiendas:
     st.info("Por favor selecciona al menos una tienda.")
