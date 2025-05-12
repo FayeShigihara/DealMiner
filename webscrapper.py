@@ -162,22 +162,24 @@ if search_query and tiendas:
     st.write(f"### Resultados para: '{search_query}'")
     resultados = []
 
-    if "Amazon" in tiendas:
-        urls_amazon = get_search_results_amazon(search_query)
-        for url in urls_amazon[:10]:
-            titulo, imagen, precio = get_product_info_amazon(url)
-            if titulo != 'No title found' and precio is not None:
-                resultados.append({
-                    "Fecha": datetime.now().strftime('%Y-%m-%d'),
-                    "Título": titulo,
-                    "Precio": precio,
-                    "URL Imagen": imagen,
-                    "URL Producto": url,
-                    "Tienda": "Amazon"
-                })
+    with st.spinner("🔎 Buscando productos..."):
+        if "Amazon" in tiendas:
+            urls_amazon = get_search_results_amazon(search_query)
+            for url in urls_amazon[:10]:
+                titulo, imagen, precio = get_product_info_amazon(url)
+                if titulo != 'No title found' and precio is not None:
+                    resultados.append({
+                        "Fecha": datetime.now().strftime('%Y-%m-%d'),
+                        "Título": titulo,
+                        "Precio": precio,
+                        "URL Imagen": imagen,
+                        "URL Producto": url,
+                        "Tienda": "Amazon"
+                    })
 
-    if "Mercado Libre" in tiendas:
-        resultados.extend(buscar_en_mercado_libre(search_query, limite=10))
+        if "Mercado Libre" in tiendas:
+            resultados.extend(buscar_en_mercado_libre(search_query, limite=10))
+
 
     if resultados:
         resultados_ordenados = sorted(resultados, key=lambda x: x["Precio"])
