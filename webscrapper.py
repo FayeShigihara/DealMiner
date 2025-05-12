@@ -182,18 +182,22 @@ if search_query and tiendas:
     if resultados:
         resultados_ordenados = sorted(resultados, key=lambda x: x["Precio"])
         for item in resultados_ordenados:
-            st.markdown("---")
-            cols = st.columns([1, 3])
+            try:
+                st.markdown("___")
+                cols = st.columns([1, 3])
+                with cols[0]:
+                    if item["URL Imagen"]:
+                        st.image(item["URL Imagen"], use_container_width=True)
+                with cols[1]:
+                    st.markdown(f"**[{item['Título']}]({item['URL Producto']})**")
+                    moneda = "USD" if item["Tienda"] == "Amazon" else "MXN"
+                    st.markdown(f"💲 **Precio:** {moneda} ${item['Precio']:.2f}")
+                    st.markdown(f"🏬 **Tienda:** {item['Tienda']}")
+                    st.markdown(f"📅 **Fecha:** {item['Fecha']}")
+            except Exception as e:
+                st.error(f"Error al mostrar un resultado: {e}")
 
-            with cols[0]:
-                if item["URL Imagen"]:
-                    st.image(item["URL Imagen"], use_container_width=True)
 
-            with cols[1]:
-                st.markdown(f"**[{item['Título']}]({item['URL Producto']})**")
-                st.markdown(f"💲 **Precio:** ${item['Precio']:.2f}")
-                st.markdown(f"🏬 **Tienda:** {item['Tienda']}")
-                st.markdown(f"📅 **Fecha:** {item['Fecha']}")
 
         file_name = save_to_excel(resultados_ordenados, search_query)
         with open(file_name, "rb") as f:
