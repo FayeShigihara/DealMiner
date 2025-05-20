@@ -1,5 +1,6 @@
 import os
 import requests
+import plotly.express as px
 import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -8,6 +9,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RL
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 import io
+import base64
+from dominate import document
+from dominate.tags import *
 
 def generate_pdf(data, query):
     buffer = io.BytesIO()
@@ -40,6 +44,105 @@ def generate_pdf(data, query):
     doc.build(elements)
     buffer.seek(0)
     return buffer
+def generate_html(data, query):
+    doc = document(title=f"Reporte {query}")
+
+    with doc.head:
+        style("""
+            body {
+                font-family: Arial, sans-serif;
+                margin: 2rem;
+                background-color: #f5f5f5;
+                color: #333;
+            }
+            h1 {
+                text-align: center;
+                margin-bottom: 2rem;
+            }
+            .product {
+                background-color: #fff;
+                border-radius: 10px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                padding: 0.8rem;
+                margin: 1rem auto;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                max-width: 500px;
+            }
+            .product img {
+                max-width: 140px;
+                height: auto;
+                border-radius: 5px;
+                margin-bottom: 0.8rem;
+            }
+            .price {
+                color: green;
+                font-weight: bold;
+                margin: 0.3rem 0;
+            }
+            .store, .date {
+                font-size: 0.85rem;
+                color: #666;
+            }
+            a {
+                display: inline-block;
+                margin-top: 0.5rem;
+                text-decoration: none;
+                color: #fff;
+                background-color: #007BFF;
+                padding: 0.3rem 0.8rem;
+                border-radius: 5px;
+                font-size: 0.85rem;
+                transition: background-color 0.3s ease;
+            }
+            a:hover {
+                background-color: #0056b3;
+            }
+            @media (min-width: 768px) {
+                .product {
+                    flex-direction: row;
+                    gap: 1rem;
+                    max-width: 600px;
+                }
+                .product img {
+                    max-width: 120px;
+                }
+                .product-details {
+                    flex: 1;
+                }
+            }
+        """)
+
+    with doc:
+        h1(f"Resultados para: {query}")
+        for item in data:
+            with div(cls="product"):
+                if item.get("URL Imagen"):
+                    try:
+                        response = requests.get(item["URL Imagen"], timeout=5)
+                        if response.status_code == 200:
+                            b64_img = base64.b64encode(response.content).decode()
+                            img(src=f"data:image/jpeg;base64,{b64_img}")
+                    except Exception as e:
+                        p(f"[Error cargando imagen: {str(e)}]")
+
+                with div(cls="product-details"):
+                    h2(item['Título'])
+                    p(f"Tienda: {item['Tienda']}", cls="store")
+                    p(f"Fecha: {item['Fecha']}", cls="date")
+                    p(f"Precio: ${item['Precio']:.2f} {'USD' if item['Tienda'] == 'Amazon' else 'MXN'}", cls="price")
+                    a("Ver producto", href=item['URL Producto'], target="_blank")
+
+    return doc.render()
+
+
+def save_to_excel(data, query):
+    df = pd.DataFrame(data)
+    file_name = f"{query.replace(' ', '_')}_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    df.to_excel(file_name, index=False)
+    return file_name
+
 
 st.set_page_config(
     page_title="DealMiner",
@@ -146,13 +249,6 @@ def buscar_en_mercado_libre(producto: str, limite=10):
 
     return resultados
 
-def save_to_excel(data, query):
-    df = pd.DataFrame(data)
-    fecha = datetime.now().strftime('%Y-%m-%d')
-    nombre_archivo = f"{query.strip().replace(' ', '_')}_{fecha}.xlsx"
-    df.to_excel(nombre_archivo, index=False)
-    return nombre_archivo
-
 st.title("🛒 Comparador de precios: Amazon + Mercado Libre")
 
 search_query = st.text_input("Introduce tu búsqueda:")
@@ -180,7 +276,6 @@ if search_query and tiendas:
         if "Mercado Libre" in tiendas:
             resultados.extend(buscar_en_mercado_libre(search_query, limite=10))
 
-
     if resultados:
         resultados_ordenados = sorted(resultados, key=lambda x: x["Precio"])
         for item in resultados_ordenados:
@@ -198,7 +293,36 @@ if search_query and tiendas:
                     st.markdown(f"📅 **Fecha:** {item['Fecha']}")
             except Exception as e:
                 st.error(f"Error al mostrar un resultado: {e}")
+        
+                # Histograma de precios por tienda
+        st.markdown("---")
+        st.subheader("Distribución de Precios")
 
+        # Crear DataFrame desde resultados ordenados
+        df = pd.DataFrame(resultados_ordenados)
+
+        # Crear histograma con Plotly
+        fig = px.histogram(
+            df,
+            x="Precio",
+            nbins=20,
+            color="Tienda",
+            marginal="rug",
+            title="Distribución de Precios por Tienda",
+            labels={"Precio": "Precio (USD/MXN)"},
+            hover_data=df.columns
+        )
+
+        # Personalización del diseño del gráfico
+        fig.update_layout(
+            bargap=0.1,
+            xaxis_title="Precio",
+            yaxis_title="Cantidad de Productos",
+            hovermode="x unified"
+        )
+
+        # Mostrar el gráfico en Streamlit
+        st.plotly_chart(fig, use_container_width=True)
 
 
         file_name = save_to_excel(resultados_ordenados, search_query)
@@ -217,8 +341,16 @@ if search_query and tiendas:
             file_name=f"{search_query.replace(' ', '_')}_{datetime.now().strftime('%Y-%m-%d')}.pdf",
             mime="application/pdf"
         )
+
+        # Generar y descargar HTML
+        html_report = generate_html(resultados_ordenados, search_query)
+        st.download_button(
+            label="🌐 Descargar HTML offline",
+            data=html_report,
+            file_name=f"{search_query.replace(' ', '_')}_reporte.html",
+            mime="text/html"
+        )
     else:
         st.warning("No se encontraron resultados para tu búsqueda.")
-
 elif search_query and not tiendas:
     st.info("Por favor selecciona al menos una tienda.")
